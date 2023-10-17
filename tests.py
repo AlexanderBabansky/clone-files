@@ -138,4 +138,5 @@ class TestStringMethods(unittest.TestCase):
             sqlcon.close()
 
 
-unittest.main()
+if __name__ == '__main__':
+    unittest.main()
