@@ -58,7 +58,7 @@ def search_files(directory, root_directory):
         if os.path.isfile(fabs):
             files_arr.append({
                 "filepath": os.path.join(directory, filename),
-                "mod_timestamp": int(os.stat(fabs).st_mtime)
+                "mod_timestamp": os.stat(fabs).st_mtime_ns
             })
         if os.path.isdir(fabs):
             files_arr += search_files(os.path.join(directory,
