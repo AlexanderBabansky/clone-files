@@ -72,8 +72,12 @@ class TestStringMethods(unittest.TestCase):
             file_desc = open(filepath, "wb")
             file_desc.write("hello".encode())
             file_desc.close()
-            self.assertEqual(md5_of_file(filepath),
-                             "5d41402abc4b2a76b9719d911017c592")
+            self.assertEqual(md5_of_file(filepath, "file1"),
+                             "730a1649974bb9908f1298fa37e9afbd")
+            file_desc = open(filepath, "wb")
+            file_desc.close()
+            self.assertEqual(md5_of_file(filepath, "file1"),
+                             "826e8142e6baabe8af779f5f490cf5f5")
 
     def test_get_files_db(self):
         with tempfile.TemporaryDirectory() as dir:
@@ -85,7 +89,7 @@ class TestStringMethods(unittest.TestCase):
             file.hash = "hash1"
             file.timestamp = 5
             file.mod_timestamp = 6
-            insert_file_backup(sqlcon, file)            
+            insert_file_backup(sqlcon, file)
             file.filepath = "myfile2"
             file.hash = "hash2"
             file.timestamp = 7
@@ -102,7 +106,7 @@ class TestStringMethods(unittest.TestCase):
             sqlcon.close()
 
     def test_changed_files(self):
-        with tempfile.TemporaryDirectory() as dir:            
+        with tempfile.TemporaryDirectory() as dir:
             db_path = os.path.join(dir, "db.db")
             files_path = os.path.join(dir, "files")
             os.mkdir(files_path)
@@ -111,20 +115,20 @@ class TestStringMethods(unittest.TestCase):
             file_desc.close()
             create_empty_db(db_path)
             sqlcon = sqlite3.connect(db_path)
-            files = search_files("", files_path)            
+            files = search_files("", files_path)
             changed_files = get_changed_files(sqlcon, files, files_path)
-            self.assertEqual(len(changed_files), 1)            
+            self.assertEqual(len(changed_files), 1)
             for f in changed_files:
                 f.timestamp = 1
-                insert_file_backup(sqlcon, f)            
+                insert_file_backup(sqlcon, f)
             changed_files = get_changed_files(sqlcon, files, files_path)
-            self.assertEqual(len(changed_files), 0)            
+            self.assertEqual(len(changed_files), 0)
             file_desc = open(os.path.join(files_path, "file1"), "wb")
             file_desc.write("hello".encode())
             file_desc.close()
             files = search_files("", files_path)
             changed_files = get_changed_files(sqlcon, files, files_path)
-            self.assertEqual(len(changed_files), 0)            
+            self.assertEqual(len(changed_files), 0)
             file_desc = open(os.path.join(files_path, "file1"), "wb")
             file_desc.write("hello2".encode())
             file_desc.close()
@@ -133,5 +137,5 @@ class TestStringMethods(unittest.TestCase):
             self.assertEqual(len(changed_files), 1)
             sqlcon.close()
 
-unittest.main()
 
+unittest.main()

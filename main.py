@@ -1,7 +1,7 @@
 import os
 import hashlib
-import shutil
 import sqlite3
+
 
 class FileBackuped:
     def __init__(self):
@@ -10,7 +10,8 @@ class FileBackuped:
         self.timestamp = None
         self.hash = None
 
-def create_empty_db(filepath):
+
+def create_empty_db(filepath: str):
     sqlcon = sqlite3.connect(filepath)
     cur = sqlcon.cursor()
     cur.execute("""
@@ -28,7 +29,7 @@ def create_empty_db(filepath):
     sqlcon.close()
 
 
-def get_latest_hash_for_file(sqlcon, file:FileBackuped):
+def get_latest_hash_for_file(sqlcon, file: FileBackuped) -> FileBackuped:
     cur = sqlcon.cursor()
     data = ({"filepath": file.filepath})
     res = cur.execute(
@@ -44,7 +45,8 @@ def get_latest_hash_for_file(sqlcon, file:FileBackuped):
     file2.mod_timestamp = last_hash_row[1]
     return file2
 
-def insert_file_backup(sqlcon, file:FileBackuped):
+
+def insert_file_backup(sqlcon, file: FileBackuped):
     cur = sqlcon.cursor()
     data = ({"filepath": file.filepath, "timestamp": file.timestamp,
             "hash": file.hash, "mod_timestamp": file.mod_timestamp})
@@ -76,9 +78,9 @@ def search_files(directory, root_directory) -> list[FileBackuped]:
     return files_arr
 
 
-def md5_of_file(filepath):
-    f = open(filepath, "r+b")
-    result = hashlib.md5(f.read())
+def md5_of_file(filepath, filename):
+    f = open(filepath, "rb")
+    result = hashlib.md5(filename.encode()+f.read())
     hashres = result.hexdigest()
     f.close()
     return hashres
@@ -90,12 +92,13 @@ def dict_factory(cursor, row):
         d[col[0]] = row[idx]
     return d
 
-def get_all_files_in_db(sqlcon):    
+
+def get_all_files_in_db(sqlcon):
     files = []
     sqlcon.row_factory = dict_factory
     cur = sqlcon.cursor()
     res = cur.execute(
-        "SELECT filepath, hash, mod_timestamp FROM file_history").fetchall()    
+        "SELECT filepath, hash, mod_timestamp FROM file_history").fetchall()
     cur.close()
     for f in res:
         file = FileBackuped()
@@ -106,16 +109,17 @@ def get_all_files_in_db(sqlcon):
     sqlcon.row_factory = None
     return files
 
-def get_changed_files(sqlcon, files:list[FileBackuped], rootdir) -> list[FileBackuped]:
+
+def get_changed_files(sqlcon, files: list[FileBackuped], rootdir) -> list[FileBackuped]:
     changed_files = []
     for f in files:
         latest_hash = get_latest_hash_for_file(sqlcon, f)
         if latest_hash == None:
-            f.hash = md5_of_file(os.path.join(rootdir, f.filepath))
+            f.hash = md5_of_file(os.path.join(rootdir, f.filepath), f.filepath)
             changed_files.append(f)
         elif latest_hash.mod_timestamp != f.mod_timestamp:
-            hash = md5_of_file(os.path.join(rootdir, f.filepath))
-            if hash!=latest_hash.hash:
+            hash = md5_of_file(os.path.join(rootdir, f.filepath), f.filepath)
+            if hash != latest_hash.hash:
                 f.hash = hash
                 changed_files.append(f)
     return changed_files
