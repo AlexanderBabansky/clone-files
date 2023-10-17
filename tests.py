@@ -7,6 +7,14 @@ import time
 from main import *
 
 
+def elements_in_list_equal(l, v):
+    res = 0
+    for e in l:
+        if e == v:
+            res += 1
+    return res
+
+
 class TestStringMethods(unittest.TestCase):
     def test_create_db(self):
         with tempfile.TemporaryDirectory() as dir:
@@ -58,10 +66,11 @@ class TestStringMethods(unittest.TestCase):
             file_desc = open(os.path.join(dir, "dir", "file3"), "x")
             file_desc.close()
             files = search_files("", dir)
-            self.assertEqual(files[0].filepath,
-                             os.path.join("dir", "file3"))
-            self.assertEqual(files[1].filepath, "file1")
-            self.assertEqual(files[2].filepath, "file2")
+            self.assertEqual(len(files), 3)
+            filepathes_test = ["file1", "file2", os.path.join("dir", "file3")]
+            for f in files:
+                self.assertEqual(elements_in_list_equal(
+                    filepathes_test, f.filepath), 1)
             self.assertNotEqual(files[0].mod_timestamp, 0)
             self.assertNotEqual(files[1].mod_timestamp, 0)
             self.assertNotEqual(files[2].mod_timestamp, 0)
