@@ -3,6 +3,12 @@ import hashlib
 import shutil
 import sqlite3
 
+class FileBackuped:
+    def __init__(self):
+        self.filepath = None
+        self.mod_timestamp = None
+        self.timestamp = None
+        self.hash = None
 
 def create_empty_db(filepath):
     sqlcon = sqlite3.connect(filepath)
@@ -22,22 +28,26 @@ def create_empty_db(filepath):
     sqlcon.close()
 
 
-def get_latest_hash_for_file(sqlcon, filepath):
+def get_latest_hash_for_file(sqlcon, file:FileBackuped):
     cur = sqlcon.cursor()
-    data = ({"filepath": filepath})
+    data = ({"filepath": file.filepath})
     res = cur.execute(
         "SELECT hash, mod_timestamp FROM file_history WHERE filepath=:filepath ORDER BY timestamp DESC", data)
     last_hash_row = res.fetchone()
     cur.close()
     if last_hash_row == None:
         return None
-    return {"hash": last_hash_row[0], "mod_timestamp": last_hash_row[1]}
+    file2 = FileBackuped()
+    file2.filepath = file.filepath
+    file2.timestamp = file.timestamp
+    file2.hash = last_hash_row[0]
+    file2.mod_timestamp = last_hash_row[1]
+    return file2
 
-
-def insert_file_backup(sqlcon, filepath, hash, timestamp, mod_timestamp):
+def insert_file_backup(sqlcon, file:FileBackuped):
     cur = sqlcon.cursor()
-    data = ({"filepath": filepath, "timestamp": timestamp,
-            "hash": hash, "mod_timestamp": mod_timestamp})
+    data = ({"filepath": file.filepath, "timestamp": file.timestamp,
+            "hash": file.hash, "mod_timestamp": file.mod_timestamp})
     cur.execute("INSERT INTO file_history (filepath, timestamp, hash, mod_timestamp) VALUES (:filepath, :timestamp, :hash, :mod_timestamp)", data)
     cur.close()
     sqlcon.commit()
@@ -51,15 +61,15 @@ def copy_file_locked(filepath_src, filepath_dst):
     f_dst.close()
 
 
-def search_files(directory, root_directory):
+def search_files(directory, root_directory) -> list[FileBackuped]:
     files_arr = []
     for filename in os.listdir(os.path.join(root_directory, directory)):
         fabs = os.path.join(root_directory, directory, filename)
         if os.path.isfile(fabs):
-            files_arr.append({
-                "filepath": os.path.join(directory, filename),
-                "mod_timestamp": os.stat(fabs).st_mtime_ns
-            })
+            file = FileBackuped()
+            file.filepath = os.path.join(directory, filename)
+            file.mod_timestamp = os.stat(fabs).st_mtime_ns
+            files_arr.append(file)
         if os.path.isdir(fabs):
             files_arr += search_files(os.path.join(directory,
                                       filename), root_directory)
@@ -81,24 +91,31 @@ def dict_factory(cursor, row):
     return d
 
 def get_all_files_in_db(sqlcon):    
+    files = []
     sqlcon.row_factory = dict_factory
     cur = sqlcon.cursor()
     res = cur.execute(
         "SELECT filepath, hash, mod_timestamp FROM file_history").fetchall()    
     cur.close()
+    for f in res:
+        file = FileBackuped()
+        file.filepath = f["filepath"]
+        file.hash = f["hash"]
+        file.mod_timestamp = f["mod_timestamp"]
+        files.append(file)
     sqlcon.row_factory = None
-    return res
+    return files
 
-def get_changed_files(sqlcon, files, rootdir):
+def get_changed_files(sqlcon, files:list[FileBackuped], rootdir) -> list[FileBackuped]:
     changed_files = []
     for f in files:
-        latest_hash = get_latest_hash_for_file(sqlcon, f["filepath"])
+        latest_hash = get_latest_hash_for_file(sqlcon, f)
         if latest_hash == None:
-            f["hash"] = md5_of_file(os.path.join(rootdir, f["filepath"]))
+            f.hash = md5_of_file(os.path.join(rootdir, f.filepath))
             changed_files.append(f)
-        elif latest_hash["mod_timestamp"] != f["mod_timestamp"]:
-            hash = md5_of_file(os.path.join(rootdir, f["filepath"]))
-            if hash!=latest_hash["hash"]:
-                f["hash"] = hash
+        elif latest_hash.mod_timestamp != f.mod_timestamp:
+            hash = md5_of_file(os.path.join(rootdir, f.filepath))
+            if hash!=latest_hash.hash:
+                f.hash = hash
                 changed_files.append(f)
     return changed_files
