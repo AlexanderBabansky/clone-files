@@ -37,9 +37,9 @@ class TestStringMethods(unittest.TestCase):
             file.mod_timestamp = 6
             file.hash = "123"
             file.timestamp = 5
-            self.assertEqual(get_latest_hash_for_file(sqlcon, file), None)
+            self.assertEqual(get_latest_hash_for_file(sqlcon, file.filepath), None)
             insert_file_backup(sqlcon, file)
-            latest_hash = get_latest_hash_for_file(sqlcon, file)
+            latest_hash = get_latest_hash_for_file(sqlcon, file.filepath)
             self.assertEqual(latest_hash.hash, "123")
             self.assertEqual(latest_hash.mod_timestamp, 6)
             sqlcon.close()
@@ -145,6 +145,27 @@ class TestStringMethods(unittest.TestCase):
             changed_files = get_changed_files(sqlcon, files, files_path)
             self.assertEqual(len(changed_files), 1)
             sqlcon.close()
+
+    def test_backup(self):
+        with tempfile.TemporaryDirectory() as dir:
+            files_path = os.path.join(dir, "files")
+            backup_path = os.path.join(dir, "backup")
+            file_orig_path = os.path.join(files_path, "file1")
+            os.mkdir(files_path)
+            os.mkdir(backup_path)
+            file_desc = open(file_orig_path, "x")
+            file_desc.write("hello")
+            file_desc.close()
+            files = search_files("", files_path)
+            db_path = os.path.join(dir, "db.db")
+            create_empty_db(db_path)
+            sqlcon = sqlite3.connect(db_path)
+            backup_changed_files(sqlcon, files, files_path, backup_path)
+            sqlcon.close()
+            file_backup_path = os.path.join(backup_path, md5_of_file(file_orig_path, "file1"), "file1")
+            f_desc = open(file_backup_path, "r")
+            self.assertEqual(f_desc.read(), "hello")
+            f_desc.close()
 
 
 if __name__ == '__main__':

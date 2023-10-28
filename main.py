@@ -1,7 +1,8 @@
 import os
 import hashlib
 import sqlite3
-
+import tempfile
+import time
 
 class FileBackuped:
     def __init__(self):
@@ -29,18 +30,18 @@ def create_empty_db(filepath: str):
     sqlcon.close()
 
 
-def get_latest_hash_for_file(sqlcon, file: FileBackuped) -> FileBackuped:
+def get_latest_hash_for_file(sqlcon, filepath) -> FileBackuped:
     cur = sqlcon.cursor()
-    data = ({"filepath": file.filepath})
+    data = ({"filepath": filepath})
     res = cur.execute(
-        "SELECT hash, mod_timestamp FROM file_history WHERE filepath=:filepath ORDER BY timestamp DESC", data)
+        "SELECT hash, mod_timestamp, timestamp FROM file_history WHERE filepath=:filepath ORDER BY timestamp DESC", data)
     last_hash_row = res.fetchone()
     cur.close()
     if last_hash_row == None:
         return None
     file2 = FileBackuped()
-    file2.filepath = file.filepath
-    file2.timestamp = file.timestamp
+    file2.filepath = filepath
+    file2.timestamp = last_hash_row[2]
     file2.hash = last_hash_row[0]
     file2.mod_timestamp = last_hash_row[1]
     return file2
@@ -111,15 +112,37 @@ def get_all_files_in_db(sqlcon):
 
 
 def get_changed_files(sqlcon, files: list[FileBackuped], rootdir) -> list[FileBackuped]:
-    changed_files = []
-    for f in files:
-        latest_hash = get_latest_hash_for_file(sqlcon, f)
-        if latest_hash == None:
-            f.hash = md5_of_file(os.path.join(rootdir, f.filepath), f.filepath)
-            changed_files.append(f)
-        elif latest_hash.mod_timestamp != f.mod_timestamp:
-            hash = md5_of_file(os.path.join(rootdir, f.filepath), f.filepath)
-            if hash != latest_hash.hash:
-                f.hash = hash
+    with tempfile.TemporaryDirectory() as tempdir:
+        changed_files : list[FileBackuped] = []
+        for f in files:
+            latest_hash = get_latest_hash_for_file(sqlcon, f.filepath)
+            if latest_hash == None:
+                f.hash = md5_of_file(os.path.join(rootdir, f.filepath), f.filepath)
                 changed_files.append(f)
-    return changed_files
+            elif latest_hash.mod_timestamp != f.mod_timestamp:
+                hash = md5_of_file(os.path.join(rootdir, f.filepath), f.filepath)
+                if hash != latest_hash.hash:
+                    f.hash = hash
+                    changed_files.append(f)
+        return changed_files
+
+def backup_file(sqlcon, tempdir, f: FileBackuped, rootdir, backupFolder):
+    try:
+        file_temp_path = os.path.join(tempdir, os.path.basename(f.filepath))
+        copy_file_locked(os.path.join(rootdir, f.filepath), file_temp_path)
+        f.hash = md5_of_file(file_temp_path, f.filepath)
+        if not os.path.exists(os.path.join(backupFolder, f.hash)):
+            os.mkdir(os.path.join(backupFolder, f.hash))
+            copy_file_locked(file_temp_path, os.path.join(
+                backupFolder, f.hash, os.path.basename(f.filepath)))
+        f.timestamp = time.time_ns()
+        insert_file_backup(sqlcon, f)
+    except PermissionError:
+        print("File ", f.filepath, " is locked")
+
+def backup_changed_files(sqlcon, files: list[FileBackuped], rootdir, backupFolder):
+    with tempfile.TemporaryDirectory() as tempdir:
+        for f in files:
+            latest_hash = get_latest_hash_for_file(sqlcon, f.filepath)
+            if latest_hash == None or latest_hash.mod_timestamp != f.mod_timestamp:
+               backup_file(sqlcon, tempdir, f, rootdir, backupFolder)
