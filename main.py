@@ -4,6 +4,7 @@ import sqlite3
 import tempfile
 import time
 
+
 class FileBackuped:
     def __init__(self):
         self.filepath = None
@@ -113,18 +114,21 @@ def get_all_files_in_db(sqlcon):
 
 def get_changed_files(sqlcon, files: list[FileBackuped], rootdir) -> list[FileBackuped]:
     with tempfile.TemporaryDirectory() as tempdir:
-        changed_files : list[FileBackuped] = []
+        changed_files: list[FileBackuped] = []
         for f in files:
             latest_hash = get_latest_hash_for_file(sqlcon, f.filepath)
             if latest_hash == None:
-                f.hash = md5_of_file(os.path.join(rootdir, f.filepath), f.filepath)
+                f.hash = md5_of_file(os.path.join(
+                    rootdir, f.filepath), f.filepath)
                 changed_files.append(f)
             elif latest_hash.mod_timestamp != f.mod_timestamp:
-                hash = md5_of_file(os.path.join(rootdir, f.filepath), f.filepath)
+                hash = md5_of_file(os.path.join(
+                    rootdir, f.filepath), f.filepath)
                 if hash != latest_hash.hash:
                     f.hash = hash
                     changed_files.append(f)
         return changed_files
+
 
 def backup_file(sqlcon, tempdir, f: FileBackuped, rootdir, backupFolder):
     try:
@@ -140,9 +144,10 @@ def backup_file(sqlcon, tempdir, f: FileBackuped, rootdir, backupFolder):
     except PermissionError:
         print("File ", f.filepath, " is locked")
 
+
 def backup_changed_files(sqlcon, files: list[FileBackuped], rootdir, backupFolder):
     with tempfile.TemporaryDirectory() as tempdir:
         for f in files:
             latest_hash = get_latest_hash_for_file(sqlcon, f.filepath)
             if latest_hash == None or latest_hash.mod_timestamp != f.mod_timestamp:
-               backup_file(sqlcon, tempdir, f, rootdir, backupFolder)
+                backup_file(sqlcon, tempdir, f, rootdir, backupFolder)
