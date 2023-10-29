@@ -141,7 +141,8 @@ def backup_changed_files(sqlcon, files: list[FileBackuped], rootdir, backupFolde
             if latest_hash == None or latest_hash.mod_timestamp != f.mod_timestamp:
                 backup_file(sqlcon, tempdir, f, rootdir, backupFolder, verbose)
             else:
-                print("File", f.filepath, "has not changed")
+                if verbose:
+                    print("File", f.filepath, "has not changed")
 
 
 def check_intergrity(sqlcon, backupFolder) -> list[str]:
