@@ -47,38 +47,6 @@ def get_test_files1() -> list[TestBackupFile]:
     return files
 
 
-def get_test_files2() -> list[TestBackupFile]:
-    files = []
-    f2 = TestBackupFile()
-    f2.content = "hello3"
-    f2.filepath = "file2"
-    files.append(f2)
-    return files
-
-
-def backup_temp_twice(dir, db_path, backup_path, files_path):
-    file_orig_path = os.path.join(files_path, "file1")
-    file_orig_path2 = os.path.join(files_path, "file2")
-    os.mkdir(files_path)
-    os.mkdir(backup_path)
-    file_desc = open(file_orig_path, "x")
-    file_desc.write("hello")
-    file_desc.close()
-    file_desc = open(file_orig_path2, "x")
-    file_desc.write("hello")
-    file_desc.close()
-    create_empty_db(db_path)
-    files = search_files("", files_path)
-    sqlcon = sqlite3.connect(db_path)
-    backup_changed_files(sqlcon, files, files_path, backup_path)
-    file_desc = open(file_orig_path, "w")
-    file_desc.write("hello2")
-    file_desc.close()
-    files = search_files("", files_path)
-    backup_changed_files(sqlcon, files, files_path, backup_path)
-    sqlcon.close()
-
-
 class TestStringMethods(unittest.TestCase):
     def test_create_db(self):
         with tempfile.TemporaryDirectory() as dir:
