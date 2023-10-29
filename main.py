@@ -3,6 +3,7 @@ import hashlib
 import sqlite3
 import tempfile
 import time
+import shutil
 
 
 class FileBackuped:
@@ -112,24 +113,6 @@ def get_all_files_in_db(sqlcon):
     return files
 
 
-def get_changed_files(sqlcon, files: list[FileBackuped], rootdir) -> list[FileBackuped]:
-    with tempfile.TemporaryDirectory() as tempdir:
-        changed_files: list[FileBackuped] = []
-        for f in files:
-            latest_hash = get_latest_hash_for_file(sqlcon, f.filepath)
-            if latest_hash == None:
-                f.hash = md5_of_file(os.path.join(
-                    rootdir, f.filepath), f.filepath)
-                changed_files.append(f)
-            elif latest_hash.mod_timestamp != f.mod_timestamp:
-                hash = md5_of_file(os.path.join(
-                    rootdir, f.filepath), f.filepath)
-                if hash != latest_hash.hash:
-                    f.hash = hash
-                    changed_files.append(f)
-        return changed_files
-
-
 def backup_file(sqlcon, tempdir, f: FileBackuped, rootdir, backupFolder, verbose: bool):
     try:
         file_temp_path = os.path.join(tempdir, os.path.basename(f.filepath))
@@ -180,3 +163,35 @@ def check_intergrity(sqlcon, backupFolder) -> list[str]:
             continue
     sqlcon.row_factory = None
     return problems_file
+
+
+def get_newest_files_older_timestamp(sqlcon, timestamp) -> list[FileBackuped]:
+    files = []
+    sqlcon.row_factory = dict_factory
+    cur = sqlcon.cursor()
+    data = ({"timestamp": timestamp})
+    res = cur.execute(
+        "SELECT * FROM file_history WHERE id in (SELECT MAX(id) FROM file_history WHERE timestamp<=:timestamp GROUP BY filepath)", data).fetchall()
+    cur.close()
+    for f in res:
+        file = FileBackuped()
+        file.filepath = f["filepath"]
+        file.hash = f["hash"]
+        file.mod_timestamp = f["mod_timestamp"]
+        file.timestamp = f["timestamp"]
+        files.append(file)
+    return files
+
+
+def restore_files(files: list[FileBackuped], backupFolder, restoreFolder, verbose=False):
+    for f in files:
+        try:
+            os.makedirs(os.path.join(restoreFolder,
+                        os.path.split(f.filepath)[0]), exist_ok=True)
+            shutil.copy2(os.path.join(backupFolder, f.hash, os.path.basename(
+                f.filepath)), os.path.join(restoreFolder, os.path.split(f.filepath)[0]))
+            if verbose:
+                print("Restored", f.filepath)
+        except:
+            if verbose:
+                print("Error while restoring", f.filepath)
