@@ -180,3 +180,25 @@ def check_intergrity(sqlcon, backupFolder) -> list[str]:
             continue
     sqlcon.row_factory = None
     return problems_file
+
+
+def get_newest_files_older_timestamp(sqlcon, timestamp) -> list[FileBackuped]:
+    files = []
+    sqlcon.row_factory = dict_factory
+    cur = sqlcon.cursor()
+    data = ({"timestamp": timestamp})
+    res = cur.execute(
+        "SELECT * FROM file_history WHERE id in (SELECT MAX(id) FROM file_history WHERE timestamp<=:timestamp GROUP BY filepath)", data).fetchall()
+    cur.close()
+    for f in res:
+        file = FileBackuped()
+        file.filepath = f["filepath"]
+        file.hash = f["hash"]
+        file.mod_timestamp = f["mod_timestamp"]
+        file.timestamp = f["timestamp"]
+        files.append(file)
+    return files
+
+
+def restore_files(files: list[FileBackuped], backupFolder, restoreFolder):
+    pass

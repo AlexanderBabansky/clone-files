@@ -15,6 +15,70 @@ def elements_in_list_equal(l, v):
     return res
 
 
+class TestBackupFile:
+    def __init__(self):
+        self.filepath = None
+        self.content = None
+
+
+def fill_directory(files_path, files: list[TestBackupFile]):
+    for f in files:
+        splited_path = os.path.split(f.filepath)
+        os.makedirs(os.path.join(files_path, splited_path[0]), exist_ok=True)
+        file_desc = open(os.path.join(files_path, f.filepath), "w")
+        file_desc.write(f.content)
+        file_desc.close()
+
+
+def get_test_files1() -> list[TestBackupFile]:
+    files = []
+    f1 = TestBackupFile()
+    f1.content = "hello1"
+    f1.filepath = "file1"
+    f2 = TestBackupFile()
+    f2.content = "hello2"
+    f2.filepath = "file2"
+    f3 = TestBackupFile()
+    f3.content = "hello2"
+    f3.filepath = "dir/file2"
+    files.append(f1)
+    files.append(f2)
+    files.append(f3)
+    return files
+
+
+def get_test_files2() -> list[TestBackupFile]:
+    files = []
+    f2 = TestBackupFile()
+    f2.content = "hello3"
+    f2.filepath = "file2"
+    files.append(f2)
+    return files
+
+
+def backup_temp_twice(dir, db_path, backup_path, files_path):
+    file_orig_path = os.path.join(files_path, "file1")
+    file_orig_path2 = os.path.join(files_path, "file2")
+    os.mkdir(files_path)
+    os.mkdir(backup_path)
+    file_desc = open(file_orig_path, "x")
+    file_desc.write("hello")
+    file_desc.close()
+    file_desc = open(file_orig_path2, "x")
+    file_desc.write("hello")
+    file_desc.close()
+    create_empty_db(db_path)
+    files = search_files("", files_path)
+    sqlcon = sqlite3.connect(db_path)
+    backup_changed_files(sqlcon, files, files_path, backup_path)
+    file_desc = open(file_orig_path, "w")
+    file_desc.write("hello2")
+    file_desc.close()
+    files = search_files("", files_path)
+    backup_changed_files(sqlcon, files, files_path, backup_path)
+    sqlcon.close()
+
+
 class TestStringMethods(unittest.TestCase):
     def test_create_db(self):
         with tempfile.TemporaryDirectory() as dir:
@@ -171,28 +235,37 @@ class TestStringMethods(unittest.TestCase):
 
     def test_check_integrity(self):
         with tempfile.TemporaryDirectory() as dir:
-            files_path = os.path.join(dir, "files")
-            backup_path = os.path.join(dir, "backup")
-            file_orig_path = os.path.join(files_path, "file1")
-            os.mkdir(files_path)
-            os.mkdir(backup_path)
-            file_desc = open(file_orig_path, "x")
-            file_desc.write("hello")
-            file_desc.close()
-            files = search_files("", files_path)
             db_path = os.path.join(dir, "db.db")
+            backup_path = os.path.join(dir, "backup")
+            files_path = os.path.join(dir, "files")
+            test_files = get_test_files1()
+            fill_directory(files_path, test_files)
+            os.mkdir(backup_path)
             create_empty_db(db_path)
+            files = search_files("", files_path)
             sqlcon = sqlite3.connect(db_path)
             backup_changed_files(sqlcon, files, files_path, backup_path)
             problems = check_intergrity(sqlcon, backup_path)
             self.assertEqual(len(problems), 0)
-            file_backup_path = os.path.join(
-                backup_path, md5_of_file(file_orig_path, "file1"), "file1")
-            f_desc = open(file_backup_path, "w")
-            f_desc.write("hello2")
-            f_desc.close()
+            fill_directory(files_path, get_test_files2())
             problems = check_intergrity(sqlcon, backup_path)
             self.assertEqual(len(problems), 1)
+            sqlcon.close()
+
+    def test_restore(self):
+        with tempfile.TemporaryDirectory() as dir:
+            db_path = os.path.join(dir, "db.db")
+            backup_path = os.path.join(dir, "backup")
+            files_path = os.path.join(dir, "files")
+            backup_temp_twice(dir, db_path, backup_path, files_path)
+            sqlcon = sqlite3.connect(db_path)
+            files_to_restore = get_newest_files_older_timestamp(
+                sqlcon, 3000000000000000000)
+            self.assertEqual(len(files_to_restore), 2)
+            self.assertEqual(
+                files_to_restore[0].hash, "205f20308510ac85df567e7ba1d542b3")
+            self.assertEqual(
+                files_to_restore[1].hash, "3f931558348ea36e6ef947a48e8c86c2")
             sqlcon.close()
 
 
