@@ -130,7 +130,7 @@ def get_changed_files(sqlcon, files: list[FileBackuped], rootdir) -> list[FileBa
         return changed_files
 
 
-def backup_file(sqlcon, tempdir, f: FileBackuped, rootdir, backupFolder):
+def backup_file(sqlcon, tempdir, f: FileBackuped, rootdir, backupFolder, verbose: bool):
     try:
         file_temp_path = os.path.join(tempdir, os.path.basename(f.filepath))
         copy_file_locked(os.path.join(rootdir, f.filepath), file_temp_path)
@@ -139,15 +139,44 @@ def backup_file(sqlcon, tempdir, f: FileBackuped, rootdir, backupFolder):
             os.mkdir(os.path.join(backupFolder, f.hash))
             copy_file_locked(file_temp_path, os.path.join(
                 backupFolder, f.hash, os.path.basename(f.filepath)))
+            if (verbose):
+                print("File ", f.filepath, " copied")
+        else:
+            if (verbose):
+                print("File ", f.filepath, " exists")
         f.timestamp = time.time_ns()
         insert_file_backup(sqlcon, f)
     except PermissionError:
-        print("File ", f.filepath, " is locked")
+        if (verbose):
+            print("File ", f.filepath, " is locked")
 
 
-def backup_changed_files(sqlcon, files: list[FileBackuped], rootdir, backupFolder):
+def backup_changed_files(sqlcon, files: list[FileBackuped], rootdir, backupFolder, verbose: bool = False):
     with tempfile.TemporaryDirectory() as tempdir:
         for f in files:
             latest_hash = get_latest_hash_for_file(sqlcon, f.filepath)
             if latest_hash == None or latest_hash.mod_timestamp != f.mod_timestamp:
-                backup_file(sqlcon, tempdir, f, rootdir, backupFolder)
+                backup_file(sqlcon, tempdir, f, rootdir, backupFolder, verbose)
+            else:
+                print("File", f.filepath, "has not changed")
+
+
+def check_intergrity(sqlcon, backupFolder) -> list[str]:
+    problems_file = []
+    sqlcon.row_factory = dict_factory
+    cur = sqlcon.cursor()
+    res = cur.execute(
+        "SELECT * FROM file_history").fetchall()
+    cur.close()
+    for f in res:
+        backup_file_path = os.path.join(
+            backupFolder, f["hash"], os.path.basename(f["filepath"]))
+        if not os.path.exists(backup_file_path):
+            problems_file.append(f["filepath"])
+            continue
+        hash = md5_of_file(backup_file_path, f["filepath"])
+        if hash != f["hash"]:
+            problems_file.append(f["filepath"])
+            continue
+    sqlcon.row_factory = None
+    return problems_file

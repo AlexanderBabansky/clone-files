@@ -169,6 +169,32 @@ class TestStringMethods(unittest.TestCase):
             self.assertEqual(f_desc.read(), "hello")
             f_desc.close()
 
+    def test_check_integrity(self):
+        with tempfile.TemporaryDirectory() as dir:
+            files_path = os.path.join(dir, "files")
+            backup_path = os.path.join(dir, "backup")
+            file_orig_path = os.path.join(files_path, "file1")
+            os.mkdir(files_path)
+            os.mkdir(backup_path)
+            file_desc = open(file_orig_path, "x")
+            file_desc.write("hello")
+            file_desc.close()
+            files = search_files("", files_path)
+            db_path = os.path.join(dir, "db.db")
+            create_empty_db(db_path)
+            sqlcon = sqlite3.connect(db_path)
+            backup_changed_files(sqlcon, files, files_path, backup_path)
+            problems = check_intergrity(sqlcon, backup_path)
+            self.assertEqual(len(problems), 0)
+            file_backup_path = os.path.join(
+                backup_path, md5_of_file(file_orig_path, "file1"), "file1")
+            f_desc = open(file_backup_path, "w")
+            f_desc.write("hello2")
+            f_desc.close()
+            problems = check_intergrity(sqlcon, backup_path)
+            self.assertEqual(len(problems), 1)
+            sqlcon.close()
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -9,34 +9,34 @@ parser = argparse.ArgumentParser(
 parser.add_argument('-d', '--database', required=True, type=str)
 parser.add_argument('-f', '--sourceFolder', required=True, type=str)
 parser.add_argument('-b', '--backupFolder', required=True, type=str)
+parser.add_argument('-a', '--action', required=True,
+                    type=str, choices=["backup", "integrity"])
 
 args = parser.parse_args()
 
-create_empty_db(args.database)
-sqlcon = sqlite3.connect(args.database)
+if args.action == "backup":
+    create_empty_db(args.database)
+    sqlcon = sqlite3.connect(args.database)
 
-sourceFolder = args.sourceFolder
-backupFolder = args.backupFolder
+    sourceFolder = args.sourceFolder
+    backupFolder = args.backupFolder
 
-files = search_files("", sourceFolder)
-changed_files = get_changed_files(sqlcon, files, sourceFolder)
+    files = search_files("", sourceFolder)
+    if len(files) == 0:
+        print("No files")
+    else:
+        print("Found", len(files), "files")
 
-if len(changed_files) == 0:
-    print("Latest state")
-else:
-    print("Backuping ", len(changed_files), " files")
-
-for c in changed_files:
-    print("File: ", c.filepath)
-    try:
-        if not os.path.exists(os.path.join(backupFolder, c.hash)):
-            os.mkdir(os.path.join(backupFolder, c.hash))
-            copy_file_locked(os.path.join(sourceFolder, c.filepath), os.path.join(
-                backupFolder, c.hash, os.path.basename(c.filepath)))
-        c.timestamp = time.time_ns()
-        insert_file_backup(sqlcon, c)
-    except PermissionError:
-        os.rmdir(os.path.join(backupFolder, c.hash))
-        print("File ", c.filepath, " is locked")
-
-sqlcon.close()
+    backup_changed_files(sqlcon, files, sourceFolder, backupFolder, True)
+    sqlcon.close()
+elif args.action == "integrity":
+    sqlcon = sqlite3.connect(args.database)
+    backupFolder = args.backupFolder
+    problems = check_intergrity(sqlcon, backupFolder)
+    if len(problems) == 0:
+        print("Integrity is OK")
+    else:
+        print("Problems with next files:")
+        for p in problems:
+            print(p)
+    sqlcon.close()
